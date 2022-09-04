@@ -1,5 +1,6 @@
 use std::{env, fs, io::Write, path::Path, sync::Arc};
 
+use dotenv_codegen::dotenv;
 use futures::StreamExt;
 use rspotify::{
     clients::mutex::Mutex,
@@ -37,7 +38,7 @@ impl PlaymateConfig {
         if fs::metadata(&config_path).is_err() {
             println!("Config file not found, creating new one");
             // Create the config file
-            fs::create_dir(
+            fs::create_dir_all(
                 &config_path
                     .parent()
                     .expect("Error getting config path parent"),
@@ -66,8 +67,8 @@ impl PlaymateConfig {
 
 #[tokio::main]
 async fn main() {
-    let spotify = spotify_auth().await;
     let mut config = PlaymateConfig::load();
+    let spotify = spotify_auth().await;
     if config.playlist_id.is_none() {
         config.playlist_id = Some(fetch_playlist_id(&spotify).await);
         config.save();
@@ -155,7 +156,11 @@ async fn fetch_playlist_id(spotify: &AuthCodeSpotify) -> PlaylistId {
 }
 
 async fn spotify_auth() -> AuthCodeSpotify {
-    let creds = Credentials::from_env().expect("Failed to get app credentials");
+    // let creds = Credentials::from_env().expect("Failed to get app credentials");
+    let creds = Credentials::new(
+        dotenv!("RSPOTIFY_CLIENT_ID"),
+        dotenv!("RSPOTIFY_CLIENT_SECRET"),
+    );
     let oauth = OAuth {
         redirect_uri: "http://localhost:8888/callback".to_string(),
         scopes: scopes!(
