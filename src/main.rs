@@ -60,7 +60,10 @@ impl PlaymateConfig {
     fn save(&self) {
         let config_str = toml::to_string(&self).unwrap();
         let appdata_dir = env::var_os("APPDATA").expect("No APPDATA environment variable?");
-        let config_path = Path::new(&appdata_dir).join("playmate").join("config.toml");
+        let config_path = Path::new(&appdata_dir)
+            .join("playmate")
+            .join("default")
+            .join("config.toml");
         fs::write(config_path, config_str).expect("Error writing config file");
     }
 }
@@ -179,7 +182,6 @@ async fn spotify_auth() -> AuthCodeSpotify {
         token_refreshing: true,
         cache_path: Path::new(&appdata_dir)
             .join("playmate")
-            .join("default")
             .join("token_cache.json"),
         // pagination_chunks: 100,
         ..Default::default()
