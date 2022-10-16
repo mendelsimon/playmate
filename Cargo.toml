@@ -10,6 +10,7 @@ strip = true
 lto = true
 
 [dependencies]
+clap = {version = "4.0.15", features = ["derive"]}
 dotenv = "0.15.0"
 dotenv_codegen = "0.15.0"
 futures = "0.3.23"
