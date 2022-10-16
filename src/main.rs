@@ -1,5 +1,6 @@
 use std::{env, fs, io::Write, path::Path, sync::Arc};
 
+use clap::Parser;
 use dotenv_codegen::dotenv;
 use futures::StreamExt;
 use rspotify::{
@@ -9,6 +10,13 @@ use rspotify::{
     scopes, AuthCodeSpotify, Config, Credentials, OAuth,
 };
 use serde::{Deserialize, Serialize};
+
+#[derive(Parser)]
+#[command(version, about, long_about = None)]
+struct Cli {
+    #[arg(short, long, default_value = "default")]
+    profile: String,
+}
 
 #[derive(Serialize, Deserialize)]
 struct PlaymateConfig {
@@ -26,12 +34,12 @@ impl PlaymateConfig {
         }
     }
 
-    fn read_or_create_config_file() -> String {
+    fn read_or_create_config_file(profile: &String) -> String {
         // Build the config string
         let appdata_dir = env::var_os("APPDATA").expect("No APPDATA environment variable?");
         let config_path = Path::new(&appdata_dir)
             .join("playmate")
-            .join("default") // This allows for custom profiles in the future
+            .join(profile) // This allows for custom profiles in the future
             .join("config.toml");
 
         // Check if the config file exists
@@ -51,18 +59,18 @@ impl PlaymateConfig {
         fs::read_to_string(config_path).expect("Unable to read config file")
     }
 
-    fn load() -> Self {
-        let config_str = Self::read_or_create_config_file();
+    fn load(profile: &String) -> Self {
+        let config_str = Self::read_or_create_config_file(profile);
         let config: PlaymateConfig = toml::from_str(&config_str).unwrap();
         config
     }
 
-    fn save(&self) {
+    fn save(&self, profile: &String) {
         let config_str = toml::to_string(&self).unwrap();
         let appdata_dir = env::var_os("APPDATA").expect("No APPDATA environment variable?");
         let config_path = Path::new(&appdata_dir)
             .join("playmate")
-            .join("default")
+            .join(profile)
             .join("config.toml");
         fs::write(config_path, config_str).expect("Error writing config file");
     }
@@ -70,11 +78,12 @@ impl PlaymateConfig {
 
 #[tokio::main]
 async fn main() {
-    let mut config = PlaymateConfig::load();
+    let cli = Cli::parse();
+    let mut config = PlaymateConfig::load(&cli.profile);
     let spotify = spotify_auth().await;
     if config.playlist_id.is_none() {
         config.playlist_id = Some(fetch_playlist_id(&spotify).await);
-        config.save();
+        config.save(&cli.profile);
     }
 
     // Get the currently playing track
