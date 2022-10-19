@@ -1,4 +1,4 @@
-use std::{env, fs, io::Write, path::Path, sync::Arc};
+use std::{env, fs, io::Write, ops::Deref, path::Path, sync::Arc};
 
 use clap::{Parser, Subcommand};
 use dotenv_codegen::dotenv;
@@ -6,7 +6,7 @@ use futures::StreamExt;
 use rspotify::{
     clients::mutex::Mutex,
     model::{Id, PlaylistId, TrackId},
-    prelude::{OAuthClient, PlayableId},
+    prelude::{BaseClient, OAuthClient, PlayableId},
     scopes, AuthCodeSpotify, Config, Credentials, OAuth,
 };
 use serde::{Deserialize, Serialize};
@@ -25,6 +25,8 @@ struct Cli {
 enum Commands {
     /// List profiles
     List,
+    /// List profiles, including the playlists (requires Spotify login)
+    ListDetailed,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -90,7 +92,8 @@ async fn main() {
     let cli = Cli::parse();
 
     match &cli.command {
-        Some(Commands::List) => return list_profiles().await,
+        Some(Commands::List) => return list_profiles(false).await,
+        Some(Commands::ListDetailed) => return list_profiles(true).await,
         None => {}
     }
 
@@ -140,10 +143,10 @@ async fn main() {
         .snapshot_id;
 }
 
-async fn list_profiles() {
+async fn list_profiles(detailed: bool) {
     let appdata_dir = env::var_os("APPDATA").expect("No APPDATA environment variable?");
     let config_path = Path::new(&appdata_dir).join("playmate");
-    let mut profiles = fs::read_dir(config_path)
+    let profiles_names = fs::read_dir(config_path)
         .expect("Error reading profiles directory")
         .into_iter()
         .filter(|entry| entry.is_ok() && entry.as_ref().unwrap().path().is_dir())
@@ -159,9 +162,24 @@ async fn list_profiles() {
         })
         .collect::<Vec<String>>();
 
-    println!("There are {} profiles:", profiles.len());
-    for profile in profiles {
-        println!("  {}", profile);
+    let mut spotify: Option<AuthCodeSpotify> = None;
+    if detailed {
+        spotify = Some(spotify_auth().await);
+    }
+    println!("There are {} profiles:", profiles_names.len());
+    for profile_name in profiles_names {
+        let profile = PlaymateConfig::load(&profile_name);
+        if detailed && profile.playlist_id.is_some() {
+            let playlist = &spotify
+                .clone()
+                .unwrap()
+                .playlist(&profile.playlist_id.unwrap(), None, None)
+                .await
+                .unwrap();
+            println!("  {}: {}", profile_name, playlist.name);
+        } else {
+            println!("  {}", profile_name);
+        }
     }
 }
 
