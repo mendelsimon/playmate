@@ -1,6 +1,6 @@
 use std::{env, fs, io::Write, path::Path, sync::Arc};
 
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use dotenv_codegen::dotenv;
 use futures::StreamExt;
 use rspotify::{
@@ -16,6 +16,15 @@ use serde::{Deserialize, Serialize};
 struct Cli {
     #[arg(short, long, default_value = "default")]
     profile: String,
+
+    #[command(subcommand)]
+    command: Option<Commands>,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// List profiles
+    List,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -79,6 +88,12 @@ impl PlaymateConfig {
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
+
+    match &cli.command {
+        Some(Commands::List) => return list_profiles().await,
+        None => {}
+    }
+
     let mut config = PlaymateConfig::load(&cli.profile);
     let spotify = spotify_auth().await;
     if config.playlist_id.is_none() {
@@ -123,6 +138,31 @@ async fn main() {
         .await
         .expect("Error adding current track to playlist")
         .snapshot_id;
+}
+
+async fn list_profiles() {
+    let appdata_dir = env::var_os("APPDATA").expect("No APPDATA environment variable?");
+    let config_path = Path::new(&appdata_dir).join("playmate");
+    let mut profiles = fs::read_dir(config_path)
+        .expect("Error reading profiles directory")
+        .into_iter()
+        .filter(|entry| entry.is_ok() && entry.as_ref().unwrap().path().is_dir())
+        .map(|entry| {
+            entry
+                .unwrap()
+                .path()
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .to_string()
+        })
+        .collect::<Vec<String>>();
+
+    println!("There are {} profiles:", profiles.len());
+    for profile in profiles {
+        println!("  {}", profile);
+    }
 }
 
 async fn fetch_playlist_id(spotify: &AuthCodeSpotify) -> PlaylistId {
